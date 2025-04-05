@@ -1,0 +1,235 @@
+#+TITLE: Generating HTML with a Minimal ElementTree-like Interface
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+SimAlq's tilepedia component generates comprehensive HTML documentation for all the game tiles without relying on heavy web frameworks. This tutorial explores how =simalq.tile.tilepedia= uses a minimal ElementTree-like interface to create clean, readable HTML.
+
+Related Python libraries:
+- Python ElementTree: https://docs.python.org/3/library/xml.etree.elementtree.html
+- metadict: https://pypi.org/project/metadict/ (used for data organization)
+
+* The ElementMaker Approach
+
+Instead of using string concatenation or templates, SimAlq employs a functional approach to HTML generation using an =ElementMaker= class that creates a DSL (Domain Specific Language) for HTML.
+
+** Core ElementMaker Implementation
+
+#+begin_src hy
+;; Simplified version of the ElementMaker approach
+(defclass ElementMaker []
+  "Makes callable objects that create HTML elements."
+  
+  (defn __getattr__ [self tag]
+    "Return a function that creates an element with the given tag."
+    (fn [#* children #** attrs]
+      ;; Convert attrs to HTML attribute strings
+      (setv attr-str 
+        (.join " " 
+          (lfor [k v] (.items attrs)
+            (+ (str k) "=\"" (str v) "\""))))
+      
+      ;; Create the opening tag with attributes
+      (setv result (+ "<" tag 
+                      (if attr-str (+ " " attr-str) "")
+                      ">"))
+      
+      ;; Add children
+      (for [child children]
+        (+= result (str child)))
+      
+      ;; Add closing tag
+      (+= result (+ "</" tag ">"))
+      
+      result)))
+#+end_src
+
+** Using ElementMaker
+
+The real power comes in how this is used:
+
+#+begin_src hy
+;; Creating an instance
+(setv E (ElementMaker))
+
+;; Using it to generate HTML
+(setv html-content
+  (E.html
+    (E.head
+      (E.title "Tile Documentation"))
+    (E.body
+      (E.h1 :class "main-title" "SimAlq Tilepedia")
+      (E.p "This document lists all available tiles."))))
+#+end_src
+
+This generates clean, well-structured HTML without string manipulation.
+
+* Tilepedia Implementation
+
+The tilepedia module compiles documentation for all tiles in the game.
+
+** Data Collection
+
+First, it collects information about all tiles:
+
+#+begin_src hy
+;; Collecting tile data
+(defn get-all-tile-data []
+  (let [result (MetaDict)]
+    ;; Iterate through all tile classes
+    (for [cls (all-tiles)]
+      (setv category (get-tile-category cls))
+      (when category
+        (.setdefault result category {})
+        (setv (get result category (. cls __name__))
+          {"class" cls
+           "info" (get-tile-info cls)})))
+    result))
+
+(defn get-tile-info [cls]
+  "Extract display info from a tile class."
+  {"name" (. cls __name__)
+   "char" (. cls char)
+   "fg" (. cls fg)
+   "bg" (. cls bg)
+   "bold" (. cls bold)
+   "desc" (. cls desc)
+   "flavor" (getattr cls "flavor" None)
+   ;; Additional properties...
+   })
+#+end_src
+
+** HTML Generation
+
+Then it renders this data as HTML:
+
+#+begin_src hy
+;; Rendering tile data as HTML
+(defn make-tilepedia-html [tile-data]
+  (setv E (ElementMaker))
+  
+  ;; Create the basic HTML structure
+  (E.html
+    (E.head
+      (E.title "SimAlq Tilepedia")
+      (E.style
+        (css-content)))
+    (E.body
+      (E.h1 "SimAlq Tilepedia")
+      (E.p "This document lists all tiles available in the game.")
+      ;; Generate sections for each category
+      #* (lfor [category tiles] (.items tile-data)
+          (E.section
+            (E.h2 category)
+            (E.div :class "tile-grid"
+              #* (render-tile-list tiles)))))))
+#+end_src
+
+** Rendering Tiles
+
+Individual tiles are rendered with their visual representation:
+
+#+begin_src hy
+;; Rendering individual tiles
+(defn render-tile [name info]
+  (setv color-style
+    (+ "color: " (html-color info.fg) "; "
+       "background-color: " (html-color info.bg) "; "
+       (if info.bold "font-weight: bold; " "")))
+  
+  (E.div :class "tile"
+    (E.div :class "symbol" :style color-style info.char)
+    (E.div :class "name" name)
+    (E.div :class "desc" info.desc)
+    (when info.flavor
+      (E.div :class "flavor" info.flavor))))
+#+end_src
+
+* CSS Styling
+
+The tilepedia also includes CSS styling:
+
+#+begin_src hy
+;; CSS content for tilepedia
+(defn css-content []
+  "body {
+     font-family: sans-serif;
+     max-width: 1200px;
+     margin: 0 auto;
+     padding: 1em;
+   }
+   
+   .tile-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+     gap: 1em;
+   }
+   
+   .tile {
+     border: 1px solid #ccc;
+     padding: 1em;
+     border-radius: 4px;
+   }
+   
+   .symbol {
+     font-family: monospace;
+     font-size: 24px;
+     margin-bottom: 0.5em;
+     width: 1.5em;
+     height: 1.5em;
+     text-align: center;
+     line-height: 1.5em;
+   }
+   
+   .name {
+     font-weight: bold;
+     margin-bottom: 0.5em;
+   }
+   
+   .flavor {
+     font-style: italic;
+     margin-top: 0.5em;
+     color: #555;
+   }")
+#+end_src
+
+* Color Handling
+
+SimAlq has a sophisticated color system that's translated to HTML:
+
+#+begin_src hy
+;; Converting game colors to HTML
+(defn html-color [color]
+  "Convert a game color to an HTML color string."
+  (if (is color None)
+    "transparent"
+    (if (isinstance color int)
+      (format "#{:06x}" color)
+      (name color))))
+#+end_src
+
+* Running and Using Tilepedia
+
+The tilepedia can be generated on demand:
+
+#+begin_src bash
+# Generate tilepedia HTML
+python -c "from simalq.tile.tilepedia import make_tilepedia; make_tilepedia('tilepedia.html')"
+#+end_src
+
+This creates a comprehensive reference document that players and developers can use to understand all available tiles in the game.
+
+* Best Practices for HTML Generation
+
+1. **Separation of Structure and Style**: Keep HTML structure and CSS styling separate
+2. **Functional Approach**: Use a functional approach to HTML generation to keep code clean
+3. **Consistent Style**: Maintain consistent styling for similar elements
+4. **Live Data**: Generate documentation from the actual game objects for accuracy
+5. **Clear Organization**: Organize content into logical categories
+6. **Minimal Dependencies**: Avoid heavy web frameworks for simple documentation
+
+* Conclusion
+
+SimAlq's tilepedia demonstrates how to generate complex HTML documentation with a minimal, elegant approach. The ElementMaker pattern provides a clean, readable way to generate HTML without string manipulation or complex templating engines, making it easy to maintain and extend the documentation as the game evolves.

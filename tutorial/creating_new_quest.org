@@ -1,0 +1,202 @@
+#+TITLE: Creating a New Quest for SimAlq
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+This guide walks you through the process of creating a new quest for SimAlq (SQ). Quests are the heart of the game, providing structured level sequences with unique challenges and narratives.
+
+Useful links:
+- Hy Language: https://docs.hylang.org/
+- SimAlq Repository: https://github.com/hylang/simalq
+- Tutorial Quest Example: https://github.com/hylang/simalq/blob/master/simalq/quest_definition/tutorial.hy
+
+* Quest Structure Overview
+
+A quest in SimAlq consists of:
+
+- A sequence of levels
+- Story elements (title, author, description)
+- Level-specific properties (map, player start position, exit conditions)
+- Custom tiles and behaviors
+
+* Creating a New Quest File
+
+To create a new quest:
+
+1. Duplicate the file =simalq/quest_definition/tutorial.hy=
+2. Place the new file in the same directory
+3. Edit it to create your unique quest
+
+* Basic Quest Definition
+
+** Required Components
+
+Every quest needs:
+
+#+begin_src hy
+;; Basic quest definition
+(mk-quest
+  :id "Your_Quest_Name"   ; Unique ID (used in command line)
+  :title "Your Quest Title"
+  :author "Your Name"
+  :description "Quest description text"
+  :levels [
+    ;; Level definitions go here
+  ])
+#+end_src
+
+** Level Definition
+
+Each level needs:
+
+#+begin_src hy
+;; Basic level definition
+(mk-level
+  :map (parse-text-map map-string)  ; ASCII map representation
+  :player-pos (Pos y x)             ; Starting position
+  :exit-condition exit-function)    ; Function that returns true when level is complete
+#+end_src
+
+* Text Map Format
+
+Maps are defined using ASCII characters, where each character represents a tile:
+
+#+begin_src
+#########  # Wall
+#.......#  . Floor
+#...P...#  P Player starting position
+#...M...#  M Monster
+#...i...#  i Item
+#########
+#+end_src
+
+** Custom Tile Markers
+
+You can define custom markers in your maps:
+
+#+begin_src hy
+;; Custom tile definition for maps
+(parse-text-map
+  "######
+   #..k.#
+   #....#
+   ######"
+  {,"k" (mk-tile "key")})  ; 'k' represents a key tile
+#+end_src
+
+* Exit Conditions
+
+Exit conditions determine when a level is complete:
+
+#+begin_src hy
+;; Sample exit conditions
+(defn exit-when-item-collected []
+  (empty? (tile-seq :type Item)))
+
+(defn exit-when-monsters-defeated []
+  (empty? (tile-seq :type Monster)))
+
+(defn exit-when-position-reached [pos]
+  (= G.player.pos pos))
+#+end_src
+
+* Special Effects and Behaviors
+
+** Level Messages
+
+Add messages that appear when the level starts:
+
+#+begin_src hy
+(mk-level
+  ;; ... other level properties ...
+  :message "Welcome to Level 1! Collect all the items to proceed.")
+#+end_src
+
+** Custom Tile Behaviors
+
+Create special tiles with unique behaviors:
+
+#+begin_src hy
+(deftile GreenButton
+  :char "O"
+  :fg :green
+  :desc "a green button"
+  
+  :step-on-effect 
+  (fn [self actor]
+    (add-msg "The button clicks as you step on it.")
+    (open-all-doors)))
+#+end_src
+
+* Complex Quest Example
+
+Here's a simplified example of a quest with two levels:
+
+#+begin_src hy
+(mk-quest
+  :id "Treasure_Hunt"
+  :title "Treasure Hunt"
+  :author "Aidan Pace"
+  :description "Find the hidden treasures in this dangerous dungeon!"
+  :levels [
+    ;; Level 1
+    (mk-level
+      :map (parse-text-map
+        "#########
+         #.......#
+         #...P...#
+         #...s...#
+         #.......#
+         #########"
+        {,"s" (mk-tile "spider")})
+      :player-pos (Pos 2 4)
+      :message "Find the key to open the door."
+      :exit-condition (fn []
+        (empty? (tile-seq :type Spider))))
+      
+    ;; Level 2
+    (mk-level
+      :map (parse-text-map
+        "###########
+         #.........#
+         #...@...T.#
+         #.........#
+         ###########"
+        {,"T" (mk-tile "treasure")
+         ,"@" (mk-tile "dragon")})
+      :player-pos (Pos 2 4)
+      :message "Defeat the dragon and claim the treasure!"
+      :exit-condition (fn []
+        (pos-contents (Pos 2 8) "player")))
+  ])
+#+end_src
+
+* Testing Your Quest
+
+To test your quest:
+
+1. Run the game with your quest ID:
+   #+begin_src bash
+   python -m simalq Your_Quest_Name
+   #+end_src
+
+2. Check for common issues:
+   - Player starting position matches the map
+   - Exit conditions function correctly
+   - Custom tiles behave as expected
+   - Level progression works properly
+
+* Best Practices
+
+1. **Start Simple**: Begin with a basic quest and add complexity gradually
+2. **Test Thoroughly**: Make sure each level can be completed
+3. **Balance Difficulty**: Provide an appropriate challenge curve
+4. **Tell a Story**: Use messages and level design to create narrative
+5. **Use Existing Tiles**: Leverage the existing tile library before creating custom ones
+6. **Document Special Features**: If you create unique mechanics, document them for players
+
+* Conclusion
+
+Creating quests is one of the most rewarding aspects of extending SimAlq. By combining ASCII map design with Hy's expressive syntax, you can create rich, interactive experiences with minimal code.

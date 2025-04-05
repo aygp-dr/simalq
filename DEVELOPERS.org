@@ -1,0 +1,423 @@
+#+TITLE: SimAlq Developers Guide
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+This guide provides technical information about SimAlq's architecture, control flow, and development patterns. It's intended for developers who want to contribute to or extend the codebase.
+
+* Project Structure
+
+SimAlq is organized into several key components:
+
+- Core game logic (=game_state.hy=, =main.hy=)
+- UI and display (=display.hy=, =color.hy=)
+- Input handling (=keyboard.hy=, =commands.hy=)
+- Geometry and positioning (=geometry.hy=)
+- Tile definitions (=tile/= directory)
+- Quest system (=quest.hy=, =quest_definition/=)
+- Save/load functionality (=save_load.hy=)
+- Original IQ compatibility (=un_iq.hy=)
+
+* Control Flow Diagrams
+
+** Main Application Flow
+
+#+begin_src mermaid
+flowchart TD
+    A[__main__.hy] --> B[cmdline.hy: handle_cmdline_args]
+    B -->|Parse command line arguments| C[Setup quest from args]
+    C --> D[main.hy: main_loop]
+    D -->|Game loop| E{User input?}
+    E -->|Key pressed| F[keyboard.hy: process_key]
+    F --> G[commands.hy: get_command]
+    G -->|Game command| H[main.hy: do_command]
+    H -->|Game action| I[main.hy: take_turn]
+    I --> J[Render screen]
+    J --> E
+    E -->|Quit command| K[Exit game]
+#+end_src
+
+** Command Processing Flow
+
+#+begin_src mermaid
+flowchart TD
+    A[Key Press] --> B[keyboard.hy: map_key_to_command]
+    B --> C{Command type?}
+    C -->|Action| D[commands.hy: do_action]
+    C -->|Non-action| E[commands.hy: do_command]
+    D -->|Move| F[Attempt movement]
+    D -->|Attack| G[Process attack]
+    D -->|Use item| H[Handle item usage]
+    E -->|Help| I[Show help screen]
+    E -->|Inventory| J[Display inventory]
+    E -->|Save| K[Save game state]
+    F --> L[Update game state]
+    G --> L
+    H --> L
+    L --> M[Next turn processing]
+#+end_src
+
+** Quest and Level Flow
+
+#+begin_src mermaid
+flowchart TD
+    A[Start quest] --> B[quest.hy: start_quest]
+    B --> C[Initialize game state]
+    C --> D[Load first level]
+    D --> E[quest.hy: start_level]
+    E --> F[Create map from definition]
+    F --> G[Place player and entities]
+    G --> H[Begin gameplay]
+    H --> I{Level complete?}
+    I -->|No| H
+    I -->|Yes| J{More levels?}
+    J -->|Yes| K[Load next level]
+    K --> E
+    J -->|No| L[Quest complete]
+#+end_src
+
+** Display Rendering Flow
+
+#+begin_src mermaid
+flowchart TD
+    A[display.hy: draw_screen] --> B[Clear terminal]
+    B --> C[display.hy: draw_map]
+    C --> D[Calculate viewport]
+    D --> E[Apply reality bubble]
+    E --> F[For each visible tile]
+    F --> G[Apply tile appearance]
+    G --> H[Apply effects]
+    H --> I[Convert to terminal colors]
+    I --> J[Render to screen]
+    J --> K[display.hy: draw_status_bar]
+    K --> L[display.hy: draw_message_line]
+    L --> M[Update terminal]
+#+end_src
+
+** Save/Load Flow
+
+#+begin_src mermaid
+flowchart TD
+    A[save_load.hy: save_game] --> B[Create ZIP container]
+    B --> C[Pickle game state]
+    C --> D[Add state.pkl to ZIP]
+    D --> E[Create metadata JSON]
+    E --> F[Add meta.json to ZIP]
+    F --> G[Write to file]
+    
+    H[save_load.hy: load_game] --> I[Open ZIP file]
+    I --> J[Extract meta.json]
+    J --> K[Extract state.pkl]
+    K --> L[Unpickle game state]
+    L --> M[Restore game state]
+#+end_src
+
+* Key Files and Their Functions
+
+** __main__.hy
+
+Entry point that calls into cmdline.hy to handle arguments and start the game.
+
+** cmdline.hy
+
+Handles command-line arguments and initializes the appropriate quest.
+
+#+begin_src mermaid
+classDiagram
+    class CommandLineHandler {
+        handle_cmdline_args(args)
+        parse_quest_name(args)
+        load_quest_by_name(name)
+        configure_options(args)
+    }
+#+end_src
+
+** main.hy
+
+Contains the main game loop and core game functionality.
+
+#+begin_src mermaid
+classDiagram
+    class MainGame {
+        main_loop()
+        take_turn()
+        do_command(cmd)
+        do_action(action)
+        update_game_state()
+        handle_player_death()
+        victory_screen()
+    }
+#+end_src
+
+** game_state.hy
+
+Defines the core game state and global state object.
+
+#+begin_src mermaid
+classDiagram
+    class Global {
+        player
+        map
+        quest
+        current_level
+        turn_count
+        messages
+        quest_items
+    }
+    
+    class GameMap {
+        width
+        height
+        tiles[]
+        get_tile(pos)
+        set_tile(pos, tile)
+    }
+    
+    Global --> GameMap
+#+end_src
+
+** quest.hy
+
+Defines the Quest and Level classes and handles level progression.
+
+#+begin_src mermaid
+classDiagram
+    class Quest {
+        id
+        title
+        author
+        description
+        levels[]
+        start()
+        next_level()
+    }
+    
+    class Level {
+        map
+        player_pos
+        exit_condition
+        message
+        start()
+        is_complete()
+    }
+    
+    Quest --> Level
+#+end_src
+
+** display.hy
+
+Handles screen rendering and terminal display.
+
+#+begin_src mermaid
+classDiagram
+    class Display {
+        draw_screen()
+        draw_map()
+        draw_status_bar()
+        draw_message_line()
+        clear_screen()
+        bless_colorstr()
+    }
+    
+    class ColorChar {
+        ch
+        fg
+        bg
+        bold
+    }
+    
+    Display --> ColorChar
+#+end_src
+
+** commands.hy
+
+Processes game commands and actions.
+
+#+begin_src mermaid
+classDiagram
+    class Command {
+        <<enumeration>>
+        Help
+        Inventory
+        Look
+        Save
+        Quit
+    }
+    
+    class Action {
+        <<enumeration>>
+        Walk
+        Wait
+        Shoot
+        UseItem
+    }
+    
+    class CommandProcessor {
+        get_command(key)
+        do_command(cmd)
+        do_action(action)
+        can_do_action(action)
+    }
+    
+    CommandProcessor --> Command
+    CommandProcessor --> Action
+#+end_src
+
+** geometry.hy
+
+Defines position and direction classes and operations.
+
+#+begin_src mermaid
+classDiagram
+    class Pos {
+        y
+        x
+        __add__(other)
+        __sub__(other)
+        __eq__(other)
+        manhattan(other)
+    }
+    
+    class Dir {
+        <<enumeration>>
+        N
+        E
+        S
+        W
+        NE
+        SE
+        SW
+        NW
+        to_pos()
+        opposite()
+    }
+    
+    class Rect {
+        top
+        left
+        bottom
+        right
+        contains(pos)
+        intersects(other)
+    }
+#+end_src
+
+** tile/*.hy
+
+Defines all tile types and behaviors.
+
+#+begin_src mermaid
+classDiagram
+    class Tile {
+        <<abstract>>
+        char
+        fg
+        bg
+        bold
+        desc
+        blocks_movement
+        blocks_sight
+        step_on_effect(actor)
+    }
+    
+    class Scenery {
+        <<abstract>>
+        blocks_movement
+        blocks_sight
+    }
+    
+    class Item {
+        <<abstract>>
+        blocks_movement = False
+        blocks_sight = False
+        on_pickup(actor)
+        on_use(actor)
+    }
+    
+    class Monster {
+        <<abstract>>
+        blocks_movement = True
+        blocks_sight = False
+        hp
+        take_damage(amount)
+        ai_action()
+    }
+    
+    class Player {
+        hp
+        inventory[]
+        take_damage(amount)
+        pickup_item(item)
+        use_item(item)
+    }
+    
+    Tile <|-- Scenery
+    Tile <|-- Item
+    Tile <|-- Monster
+    Tile <|-- Player
+#+end_src
+
+* Workflow for Common Tasks
+
+** Adding a New Tile Type
+
+1. Choose the appropriate category (=item.hy=, =monster.hy=, =scenery.hy=)
+2. Use the =deftile= macro to define the tile
+3. Specify required properties (char, fg, bg, desc)
+4. Implement behavior methods as needed
+5. Add to the tilepedia by running the tilepedia generator
+
+** Creating a New Quest
+
+1. Create a new file in =quest_definition/=
+2. Use =mk-quest= and =mk-level= to define the quest structure
+3. Design level maps using ASCII representation
+4. Define custom exit conditions
+5. Test the quest by running with its ID
+
+** Implementing a New Command
+
+1. Add a new Command enum value in =commands.hy=
+2. Map keyboard inputs to the command in =keyboard.hy=
+3. Implement command handling in =do_command=
+4. Update help documentation
+
+** Adding a New Game Mechanic
+
+1. Identify where the mechanic belongs in the architecture
+2. Extend the appropriate component
+3. Update the game state handling if needed
+4. Add UI elements if required
+5. Write tests for the new functionality
+
+* Release Process
+
+SimAlq uses semantic versioning:
+
+- Major version: Significant features or breaking changes
+- Minor version: New features and enhancements
+- Patch version: Bug fixes and minor improvements
+
+Current version history:
+- 2.0.0 (2025-04-03): The IQ quest Nightmare 2 is now fully playable (commit 37c1d0b)
+  * GitHub: https://github.com/hylang/simalq/releases/tag/v2.0.0
+- 1.0.2 (2024-09-22): Largely internal changes (commit 4fe1b45)
+  * GitHub: https://github.com/hylang/simalq/releases/tag/v1.0.2
+
+Version comparison: https://github.com/hylang/simalq/compare/v1.0.2...v2.0.0
+
+* Version Differences
+
+** v1.0.2 → v2.0.0
+
+Major changes:
+- Added full support for Nightmare 2 quest from original IQ
+- Implemented dragons (egg → wyrmling → dragon progression)
+- Added spider and web mechanics specifically for Nightmare 2
+- Fixed various bugs and improved performance
+
+* Conclusion
+
+SimAlq's architecture combines the elegance of Hy (a Lisp dialect) with the robustness of Python libraries like blessed and construct. The modular design makes it straightforward to extend with new tiles, quests, and mechanics while maintaining compatibility with the original IQ game format.

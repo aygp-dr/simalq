@@ -1,0 +1,205 @@
+#+TITLE: Parsing a Novel Binary Format with construct
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+SimAlq uses the =construct= library to parse binary formats, particularly for loading quest data from the original Infinitesimal Quest (IQ) games. This tutorial explores how =construct= is used to handle complex binary formats in a clean, declarative way.
+
+* The construct Library
+
+=construct= is a powerful Python library for parsing and building binary data. It uses a declarative approach where you define the structure of your data format, and the library handles the parsing and building.
+
+Library: https://pypi.org/project/construct/
+Documentation: https://construct.readthedocs.io/
+
+#+begin_src python
+# Basic construct import pattern
+from construct import Struct, Int8ul, Array, Const, Bytes
+#+end_src
+
+* Binary Format Challenges in SimAlq
+
+SimAlq needs to parse several binary formats:
+
+1. Original IQ quest files
+2. Level data with tile information
+3. Game state for save/load functionality
+
+* Declarative Schema Definition
+
+=construct= allows for declarative schema definitions that describe binary formats:
+
+#+begin_src python
+# Example schema for a simplified tile structure
+TileStruct = Struct(
+    "type" / Int8ul,
+    "x" / Int8ul,
+    "y" / Int8ul,
+    "properties" / Bytes(4)
+)
+
+# Schema for a level
+LevelStruct = Struct(
+    "header" / Const(b"LEVEL"),
+    "width" / Int8ul,
+    "height" / Int8ul,
+    "tile_count" / Int16ul,
+    "tiles" / Array(this.tile_count, TileStruct)
+)
+#+end_src
+
+* Parsing in SimAlq's un_iq Module
+
+The =un_iq.hy= module uses =construct= to load original IQ quest data:
+
+#+begin_src hy
+(import construct)
+
+;; Define the format for IQ quest files
+(setv IQQuestFormat
+  (construct.Struct
+    "magic" (construct.Const b"IQST")
+    "version" (construct.Int16ul)
+    "title_length" (construct.Int8ul)
+    "title" (construct.Bytes (lambda this : this.title_length))
+    "author_length" (construct.Int8ul)
+    "author" (construct.Bytes (lambda this : this.author_length))
+    "level_count" (construct.Int8ul)
+    "levels" (construct.Array (lambda this : this.level_count)
+              LevelFormat)))
+
+;; Define the format for levels
+(setv LevelFormat
+  (construct.Struct
+    "width" (construct.Int8ul)
+    "height" (construct.Int8ul)
+    "map_data" (construct.Bytes (lambda this : (* this.width this.height)))
+    "entity_count" (construct.Int16ul)
+    "entities" (construct.Array (lambda this : this.entity_count)
+                EntityFormat)))
+
+;; Define the format for entities
+(setv EntityFormat
+  (construct.Struct
+    "type" (construct.Int8ul)
+    "x" (construct.Int8ul)
+    "y" (construct.Int8ul)
+    "properties" (construct.Bytes 4)))
+#+end_src
+
+* Parsing Binary Data
+
+Once the schema is defined, parsing is straightforward:
+
+#+begin_src hy
+;; Parse a binary file
+(defn parse-iq-quest [filepath]
+  (with [f (open filepath "rb")]
+    (setv data (IQQuestFormat.parse-stream f))
+    (process-iq-quest-data data)))
+
+;; Process the parsed data
+(defn process-iq-quest-data [data]
+  (let [quest (Quest)]
+    (setv quest.title (.decode data.title "utf-8"))
+    (setv quest.author (.decode data.author "utf-8"))
+    
+    ;; Process levels
+    (setv quest.levels
+      (lfor level data.levels
+        (process-iq-level-data level)))
+    
+    quest))
+#+end_src
+
+* Dynamic Formats with Lambdas
+
+=construct= supports dynamic sizes and structures with lambda functions:
+
+#+begin_src hy
+;; Dynamic field size example
+(construct.Bytes (lambda this : this.length_field))
+
+;; Variable-sized array
+(construct.Array (lambda this : this.count_field) ElementFormat)
+#+end_src
+
+This is crucial for formats where field sizes are determined by other fields in the data.
+
+* Adapting and Transforming
+
+=construct= provides adapters to transform data during parsing:
+
+#+begin_src hy
+;; Adapter example for string encoding/decoding
+(construct.PascalString 
+  (construct.Int8ul) 
+  "utf8")  ; Handles length prefix and encoding
+
+;; Computed fields
+(construct.Computed (lambda this : (+ this.width this.height)))
+#+end_src
+
+* Error Handling in Binary Parsing
+
+Robust error handling is critical for binary parsing:
+
+#+begin_src hy
+;; Error handling for binary parsing
+(defn safe-parse-binary [parser binary-data]
+  (try
+    (parser.parse binary-data)
+    (except [e construct.ConstructError]
+      (print f"Error parsing binary data: {e}")
+      None)))
+#+end_src
+
+* Performance Considerations
+
+When working with large binary formats:
+
+1. Use =parse_stream= instead of =parse= for large files
+2. Consider using =Lazy= fields for on-demand parsing
+3. Implement custom caching for frequently accessed structures
+
+#+begin_src hy
+;; Streaming parse example
+(with [f (open "large_file.bin" "rb")]
+  (setv data (MyFormat.parse-stream f)))
+#+end_src
+
+* Creating Binary Formats
+
+=construct= can also build binary data from Python objects:
+
+#+begin_src hy
+;; Building binary data
+(defn build-entity-data [entity]
+  (EntityFormat.build {
+    "type" entity.type-id
+    "x" entity.pos.x
+    "y" entity.pos.y
+    "properties" entity.get-binary-properties()}))
+#+end_src
+
+* Custom Binary Format Validation
+
+Validation ensures binary data meets expected formats:
+
+#+begin_src hy
+;; Validate binary data with construct
+(defn validate-binary-format [data format]
+  (try
+    (format.parse data)
+    (print "Valid format")
+    True
+    (except [e construct.ConstructError]
+      (print f"Invalid format: {e}")
+      False)))
+#+end_src
+
+* Conclusion
+
+=construct= provides a powerful, declarative approach to binary format parsing that matches the elegance of SimAlq's Hy codebase. By defining schemas that mirror the structure of binary formats, SimAlq can seamlessly integrate with legacy data formats while maintaining code readability and maintainability.

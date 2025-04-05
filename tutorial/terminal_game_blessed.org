@@ -1,0 +1,107 @@
+#+TITLE: Writing a Terminal-based Game with blessed
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+This tutorial explores how SimAlq (SQ) uses the =blessed= library to create a robust terminal-based game interface with color support, keyboard input handling, and dynamic screen updates.
+
+* Blessed Library Overview
+
+=blessed= is a Python library that provides terminal formatting, color output, keyboard input handling, and other terminal capabilities. It's an enhanced fork of the =blessings= library.
+
+Library: https://pypi.org/project/blessed/
+Documentation: https://blessed.readthedocs.io/
+
+#+begin_src python
+# Core blessed import pattern in SQ
+from blessed import Terminal
+term = Terminal()
+#+end_src
+
+* Key Components in SimAlq
+
+** Screen Management
+
+SimAlq manages the terminal display through these key components:
+
+- =ColorChar= dataclass: Represents a character with foreground/background colors and bold attribute
+- =draw-screen= function: Main display loop that renders the map, status bar, and messages
+- =bless-colorstr= function: Converts colored strings to terminal sequences
+
+** Input Handling
+
+SimAlq captures keyboard input and translates it to game commands:
+
+- =io-mode= function: Manages keyboard input/display loops
+- =inkey= method from =blessed.Terminal=: Captures raw input
+- =get-command= function: Converts key presses to game commands
+
+** Color Support
+
+SimAlq has robust color handling using Blessed:
+
+- 24-bit color support when available
+- Color approximation for terminals with limited color support
+- Bold text formatting for emphasis
+
+* Implementation Highlights
+
+** Map Display
+The map display handles:
+- Character wrapping at screen edges
+- Visibility based on the "reality bubble"
+- Special markers for items, monsters, and the player
+
+#+begin_src hy
+;; Sample from draw-map function (simplified)
+(defn draw-map [term G]
+  (let [map-width (get G.map.shape 1)
+        map-height (get G.map.shape 0)
+        viewport-width (- term.width 2)
+        viewport-height (- term.height 4)]
+    ;; Map drawing logic follows...
+    ))
+#+end_src
+
+** Status Bar
+The status bar displays dynamic game information:
+- Player HP (with color coding based on health level)
+- Status effects (poison, etc.)
+- Level information
+- Inventory summary
+
+** Modal Interfaces
+SimAlq implements several UI modes:
+- Normal gameplay mode
+- Look mode (examining map elements)
+- Targeting mode (for ranged attacks)
+- Inventory display
+- Help screens
+
+* Best Practices
+
+1. **Abstraction**: Create high-level functions to abstract terminal-specific code
+2. **Graceful Degradation**: Support terminals with varying color capabilities
+3. **Input Buffering**: Handle input with appropriate buffering to avoid issues
+4. **Screen Clearing**: Minimize full screen redraws for better performance
+5. **Context Management**: Properly manage terminal state through context managers
+
+* Example: Colored Text Output
+
+Here's how SimAlq generates colored text with blessed:
+
+#+begin_src hy
+;; Converting ColorChar to terminal sequences
+(defn bless-colorstr [term colorstr]
+  (lfor c colorstr
+    :setv color-fg (if (is None c.fg) "" (. term (color-name c.fg)))
+    :setv color-bg (if (is None c.bg) "" (. term (on-color-name c.bg))))
+    :setv style (if c.bold term.bold "")
+    (+ color-fg color-bg style c.ch (or term.normal "")))
+#+end_src
+
+* Conclusion
+
+=blessed= provides the foundation for SimAlq's engaging terminal interface, enabling sophisticated rendering, color support, and input handling while maintaining compatibility across different terminal environments.

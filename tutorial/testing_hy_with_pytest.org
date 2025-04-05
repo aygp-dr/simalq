@@ -1,0 +1,176 @@
+#+TITLE: Testing a Hy Program with pytest
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Introduction
+
+This guide explains how SimAlq integrates Hy, a Lisp dialect embedded in Python, with pytest, the standard Python testing framework. This combination allows for elegant, Lisp-style code with robust testing capabilities.
+
+Hy: https://pypi.org/project/hy/
+Hy Documentation: https://docs.hylang.org/
+
+pytest: https://pypi.org/project/pytest/
+pytest Documentation: https://docs.pytest.org/
+
+* Integrating Hy with pytest
+
+** The conftest.py Bridge
+
+The key to testing Hy code with pytest is the =conftest.py= file:
+
+#+begin_src python
+# From conftest.py
+import hy, pytest
+  # `hy` is imported for the side-effect of allowing import of Hy
+  # programs.
+
+def pytest_collect_file(file_path, parent):
+    if file_path.name.startswith('test_') and file_path.suffix == '.hy':
+        return pytest.Module.from_parent(parent, path = file_path)
+#+end_src
+
+This configuration:
+1. Imports the =hy= module to enable Hy code processing
+2. Tells pytest to collect test files with names starting with =test_= and having the =.hy= extension
+3. Treats these files as standard pytest modules
+
+** Test File Structure
+
+SimAlq's test files are written in Hy and follow these conventions:
+
+- Filenames start with =test_= and have the =.hy= extension
+- Test functions use the =defn test-*= or =defn hyx-test-*= naming pattern
+- Standard pytest assertions and fixtures are used
+
+* Testing Utilities in SimAlq
+
+SimAlq has a robust testing library in =tests/lib.hy= that provides:
+
+** State Setup Functions
+
+#+begin_src hy
+(defn init []
+  "Initialize a basic game state for testing."
+  ;; Initialize game state...
+  )
+
+(defn init-boot-camp []
+  "Initialize specifically with Tutorial Quest."
+  ;; Load tutorial quest...
+  )
+#+end_src
+
+** Custom Assertions
+
+#+begin_src hy
+(defn assert-hp [n]
+  "Assert that the player's HP equals n."
+  (assert (= G.player.hp n)))
+
+(defn assert-at [pos expected]
+  "Assert that the tile at pos matches expected."
+  ;; Validation logic...
+  )
+
+(defn assert-textmap [expected-text]
+  "Assert that the current map matches the given text representation."
+  ;; Parsing and comparison logic...
+  )
+#+end_src
+
+** Action Wrappers
+
+#+begin_src hy
+(defn wk [dir]
+  "Walk one step in the given direction."
+  (do-action (Action.Walk dir)))
+
+(defn wait []
+  "Wait one turn."
+  (do-action (Action.Wait)))
+
+(defn shoot [dir]
+  "Shoot in the given direction."
+  (do-action (Action.Shoot dir)))
+#+end_src
+
+** Testing Failures
+
+#+begin_src hy
+(defmacro cant [action]
+  "Assert that the given action cannot be performed."
+  `(do
+     (try
+       ~action
+       (assert False "Expected action to fail")
+       (except [CantDoThat]
+         (assert True)))))
+#+end_src
+
+* Writing Tests in Hy
+
+** Example Test Structure
+
+#+begin_src hy
+(require simalq.macros *)
+(require tests.lib *)
+(import pytest)
+(import tests.lib *)
+(import simalq.geometry [Pos Dir])
+(import simalq.game-state [G])
+
+(defn test-example []
+  "Test example functionality."
+  (init)  ; Set up test state
+  (assert-hp 10)  ; Initial HP
+  (wk Dir.N)  ; Move north
+  (assert-at (Pos 2 2) "player"))
+#+end_src
+
+** Test Organization
+
+SimAlq organizes tests by component:
+- =test_basic.hy=: Core game functionality
+- =test_geometry.hy=: Position and direction logic
+- =test_item.hy=: Item behavior
+- =test_monster.hy=: Monster behavior
+- =test_scenery.hy=: Map features
+- =test_un_iq.hy=: IQ quest compatibility
+
+* Running Tests
+
+From the command line:
+
+#+begin_src bash
+# Run all tests
+pytest
+
+# Run a specific test file
+pytest tests/test_basic.hy
+
+# Run a specific test
+pytest tests/test_basic.hy::test_function_name
+#+end_src
+
+With make:
+
+#+begin_src bash
+# Run all tests
+make test
+
+# Run a single test
+make test-single TEST=test_basic.hy::test_function_name
+#+end_src
+
+* Best Practices for Testing Hy Code
+
+1. **State Initialization**: Always start with a clean state using =init= or =init-boot-camp=
+2. **Isolation**: Each test should be independent
+3. **Conciseness**: Use the helper functions to keep tests readable
+4. **Determinism**: SimAlq tests rely on deterministic behavior
+5. **Descriptive Names**: Use descriptive test names that explain what's being tested
+
+* Conclusion
+
+The combination of Hy and pytest offers a powerful framework for testing Lisp-style code in Python. SimAlq's testing approach demonstrates how to build a comprehensive test suite that maintains the elegance of Lisp while leveraging the robustness of pytest.

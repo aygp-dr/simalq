@@ -1,0 +1,242 @@
+#+TITLE: SimAlq Release Report: v1.0.2 to v2.0.0
+#+AUTHOR: Aidan Pace
+#+DATE: 2025-04-05
+#+PROPERTY: header-args :mkdirp yes
+
+* Overview
+
+This document details the changes between SimAlq v1.0.2 (released on 2024-09-22) and v2.0.0 (released on 2025-04-03). The major version increment reflects the significant addition of fully playable Nightmare 2 quest from the original Infinitesimal Quest game.
+
+Version comparison: https://github.com/hylang/simalq/compare/v1.0.2...v2.0.0
+
+Tag details:
+- v2.0.0: Released April 3, 2025 (commit 37c1d0b)
+- v1.0.2: Released September 22, 2024 (commit 4fe1b45)
+
+* Major Features
+
+** Nightmare 2 Quest Implementation
+The primary focus of this release was completing support for the Nightmare 2 quest from the original IQ game.
+
+- Complete level design implementation
+- Specialized monster behaviors for the quest
+- Quest-specific items and interactions
+- Unique exit conditions and victory requirements
+
+** Dragon Implementation
+
+Dragons were added as a new monster type with unique progression mechanics:
+
+- Three-stage evolution: Egg → Wyrmling → Dragon
+- Health regeneration abilities
+- Transformation triggered by specific HP thresholds
+- Distinctive visual appearance and behavior
+
+#+begin_src text
+Dragon Evolution Path:
+  🥚  →  🐉  →  🐲
+ (Egg) (Wyrmling) (Dragon)
+#+end_src
+
+** Spider and Web Mechanics
+
+New mechanics specifically for the Nightmare 2 quest:
+
+- Web tiles that slow player movement
+- Spider monsters with unique attack patterns
+- Web-spinning behavior for spiders
+- Specialized interactions between webs and other game elements
+
+* Implementation Changes
+
+** Monster Behavior Enhancements
+
+- Improved pathfinding for monsters
+- Enhanced AI decision-making
+- More varied attack patterns
+- Support for special monster abilities
+
+** Tile System Improvements
+
+- Changed the symbol for Death to 'A'
+- Added new scenery types for quest variety
+- Implemented attribute inheritance with `NotImplemented` instead of `NotImplementedError`
+- Enhanced tile interaction capabilities
+
+** Game Engine Updates
+
+- Improved performance for map rendering
+- Enhanced save/load functionality
+- Better error handling for quest loading
+- Expanded message system for game events
+
+* Code Architecture Changes
+
+** Refactoring
+
+- Moved towards using `NotImplemented` for unimplemented attributes
+- Improved code organization across modules
+- Enhanced documentation and comments
+- Reduced redundancy in tile definitions
+
+** Internal APIs
+
+- Standardized monster creation APIs
+- Improved quest loading interface
+- Enhanced tile interaction methods
+- Streamlined game state management
+
+* Testing and Quality Assurance
+
+- Added comprehensive tests for Nightmare 2 quest
+- Expanded test coverage for dragon mechanics
+- Enhanced test utilities for quest verification
+- Added performance benchmarks for map rendering
+
+* Documentation Updates
+
+- Added documentation for Nightmare 2 quest
+- Updated tilepedia with new tile types
+- Enhanced help text for new game mechanics
+- Improved README with latest features
+
+* Technical Details
+
+** Dragon Implementation
+
+#+begin_src hy
+;; Simplified implementation of dragon evolution
+(deftile DragonEgg
+  :char "o"
+  :fg :red
+  :bg :black
+  :desc "a dragon egg"
+  :flavor "It's warm to the touch and occasionally twitches."
+  
+  :hp 5
+  :max-hp 5
+  
+  ;; When HP reaches threshold, transform to Wyrmling
+  :take-damage
+  (fn [self amount]
+    (setv old-hp self.hp)
+    (super self).take-damage amount)
+    (when (and (<= self.hp 0) (> old-hp 0))
+      (transform-to-wyrmling self.pos))))
+
+(deftile Wyrmling
+  :char "d"
+  :fg :red
+  :bg :black
+  :desc "a wyrmling"
+  :flavor "A newly hatched dragon, small but dangerous."
+  
+  :hp 15
+  :max-hp 15
+  :regeneration 1
+  
+  ;; Regenerates health each turn
+  :ai-action
+  (fn [self]
+    (when (< self.hp self.max-hp)
+      (+= self.hp self.regeneration)
+      (min self.hp self.max-hp))
+    ;; Regular AI actions...
+    ))
+
+(deftile Dragon
+  :char "D"
+  :fg :red
+  :bg :black
+  :desc "a dragon"
+  :flavor "A fearsome beast with scales like armor and fiery breath."
+  
+  :hp 30
+  :max-hp 30
+  :regeneration 2
+  :flame-breath True
+  
+  ;; Advanced AI with flame breath attack
+  :ai-action
+  (fn [self]
+    ;; Regeneration logic
+    (when (< self.hp self.max-hp)
+      (+= self.hp self.regeneration)
+      (min self.hp self.max-hp))
+    ;; Attack logic with flame breath...
+    ))
+#+end_src
+
+** Web and Spider Implementation
+
+#+begin_src hy
+;; Simplified web mechanics
+(deftile Web
+  :char "♒"
+  :fg :gray
+  :bg :black
+  :desc "a sticky web"
+  :flavor "The silken strands cling to everything they touch."
+  
+  :blocks-movement False
+  :blocks-sight False
+  
+  ;; Slows movement through the web
+  :step-on-effect
+  (fn [self actor]
+    (when (instance? Player actor)
+      (add-msg "The web slows your movement.")
+      (setv G.player.movement-points (- G.player.movement-points 1)))))
+
+;; Simplified spider implementation
+(deftile Spider
+  :char "s"
+  :fg :dark-gray
+  :bg :black
+  :desc "a giant spider"
+  :flavor "Its many eyes glitter with malevolent intelligence."
+  
+  :hp 8
+  :max-hp 8
+  
+  ;; Special AI that can create webs
+  :ai-action
+  (fn [self]
+    ;; Web spinning logic
+    (when (= (random.randint 0 5) 0)
+      (let [dir (random.choice (list Dir))]
+        (setv web-pos (+ self.pos (dir.to-pos)))
+        (when (and (on-map? web-pos) (empty-floor? web-pos))
+          (add-msg "The spider spins a web.")
+          (create-at web-pos "web"))))
+    ;; Movement and attack logic...
+    ))
+#+end_src
+
+* Compatibility Notes
+
+- Save files from v1.0.2 should be compatible with v2.0.0
+- Custom quests may need updates to work with new tile types
+- Extensions built for v1.0.2 should generally work with v2.0.0
+- Quest files from original IQ are fully supported
+
+* Known Issues
+
+- Some path-finding edge cases with web tiles
+- Rare visual glitches with dragon transformation
+- Performance impact with large numbers of web tiles
+- Memory usage grows with complex levels
+
+* Future Development
+
+Planned features for upcoming releases:
+
+- Additional IQ quests implementation
+- Enhanced visual effects for special attacks
+- More monster types and behaviors
+- Expanded item interactions
+- Performance optimizations
+
+* Conclusion
+
+The update from v1.0.2 to v2.0.0 represents a significant milestone for SimAlq, with the full implementation of Nightmare 2 quest bringing the game closer to complete compatibility with the original Infinitesimal Quest while adding unique enhancements and improvements.
